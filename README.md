@@ -31,7 +31,11 @@ PerspectiveLens brings these reports together and allows readers to compare them
 
 ## News Collection
 
-The platform continuously collects recent news articles from multiple publishers and organizes them based on the events they describe.
+The platform continuously collects recent Tamil news articles from multiple publishers and organizes them based on the events they describe. We use a multi-source ingestion pipeline powered by:
+- Google News RSS
+- NewsData.io API
+- GNews.io API
+- Currents API
 
 ---
 
