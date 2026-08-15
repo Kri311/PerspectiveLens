@@ -5,10 +5,13 @@ from sqlalchemy import create_engine, Column, String, Integer, Float, DateTime, 
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import declarative_base, sessionmaker
 
-DATABASE_URL = os.getenv(
+DATABASE_URL_ENV = os.getenv(
     "DATABASE_URL",
     f"postgresql://{os.getenv('POSTGRES_USER', 'perslens')}:{os.getenv('POSTGRES_PASSWORD', 'lens2026')}@postgres:5432/{os.getenv('POSTGRES_DB', 'perslens')}"
 )
+
+# Force synchronous driver for Celery worker
+DATABASE_URL = DATABASE_URL_ENV.replace("postgresql+asyncpg://", "postgresql://")
 
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

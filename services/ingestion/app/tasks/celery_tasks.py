@@ -7,6 +7,9 @@ from celery import shared_task
 from dateutil import parser
 from app.database import SessionLocal, Article, Source
 from app.providers.google_news import GoogleNewsRSSProvider
+from app.providers.newsdata import NewsDataIOProvider
+from app.providers.gnews import GNewsIOProvider
+from app.providers.currents import CurrentsAPIProvider
 from app.normalization.boilerplate import extract_article_text
 from app.normalization.unicode import normalize_tamil_text
 from app.deduplication.language_filter import is_tamil
@@ -37,12 +40,7 @@ def fetch_html(url: str) -> Optional[str]:
         logger.error(f"Failed to fetch HTML for {url}: {e}")
         return None
 
-@shared_task(bind=True)
-def fetch_google_news(self):
-    logger.info("Starting Google News RSS fetch...")
-    provider = GoogleNewsRSSProvider()
-    articles_data = provider.fetch(query="தமிழ்நாடு", limit=50)
-    
+def process_articles(provider_name: str, articles_data: list):
     db: Session = SessionLocal()
     success_count = 0
     skip_count = 0
@@ -87,7 +85,7 @@ def fetch_google_news(self):
                 continue
                 
             # Source resolution
-            source_name = data.get('source_name') or 'Google News Unknown'
+            source_name = data.get('source_name') or f'{provider_name} Unknown'
             source = get_or_create_source(db, source_name)
             
             # Insert into database
@@ -107,7 +105,7 @@ def fetch_google_news(self):
                 db.add(article)
                 db.commit()
                 success_count += 1
-                logger.info(f"Ingested new article: {url}")
+                logger.info(f"Ingested new article from {provider_name}: {url}")
             except IntegrityError:
                 db.rollback()
                 logger.warning(f"Integrity error (likely duplicate URL) for {url}")
@@ -116,5 +114,33 @@ def fetch_google_news(self):
     finally:
         db.close()
         
-    logger.info(f"Google News fetch complete. Ingested: {success_count}, Skipped: {skip_count}")
+    logger.info(f"{provider_name} fetch complete. Ingested: {success_count}, Skipped: {skip_count}")
     return {"ingested": success_count, "skipped": skip_count}
+
+@shared_task(bind=True)
+def fetch_google_news(self):
+    logger.info("Starting Google News RSS fetch...")
+    provider = GoogleNewsRSSProvider()
+    articles_data = provider.fetch(query="தமிழ்நாடு", limit=50)
+    return process_articles("Google News RSS", articles_data)
+
+@shared_task(bind=True)
+def fetch_newsdata_io(self):
+    logger.info("Starting NewsData.io API fetch...")
+    provider = NewsDataIOProvider()
+    articles_data = provider.fetch(query="தமிழ்நாடு", limit=50)
+    return process_articles("NewsData.io API", articles_data)
+
+@shared_task(bind=True)
+def fetch_gnews_io(self):
+    logger.info("Starting GNews.io API fetch...")
+    provider = GNewsIOProvider()
+    articles_data = provider.fetch(query="தமிழ்நாடு", limit=50)
+    return process_articles("GNews.io API", articles_data)
+
+@shared_task(bind=True)
+def fetch_currents_api(self):
+    logger.info("Starting Currents API fetch...")
+    provider = CurrentsAPIProvider()
+    articles_data = provider.fetch(query="தமிழ்நாடு", limit=50)
+    return process_articles("Currents API", articles_data)

@@ -90,6 +90,44 @@ services:
     networks:
       - perslens-network
 
+  # ------------------------------------------
+  # NLP Engine (Embeddings & NER)
+  # ------------------------------------------
+  nlp-engine:
+    build:
+      context: ./services/nlp-engine
+    container_name: perslens-nlp
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./model_cache:/root/.cache/huggingface  # Cache models locally
+      - ./services/nlp-engine/app:/app/app      # hot reload in dev
+    restart: unless-stopped
+    networks:
+      - perslens-network
+
+  # ------------------------------------------
+  # Analysis Worker (Event Resolution & Clustering)
+  # ------------------------------------------
+  analysis-worker:
+    build:
+      context: ./services/analysis-worker
+    container_name: perslens-analysis
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nlp-engine:
+        condition: service_started
+    volumes:
+      - ./services/analysis-worker/app:/app/app  # hot reload in dev
+    restart: unless-stopped
+    networks:
+      - perslens-network
+
 # ------------------------------------------
 # Persistent Volumes
 # ------------------------------------------

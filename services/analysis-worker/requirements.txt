@@ -1,0 +1,7 @@
+celery==5.3.6
+redis==5.0.1
+SQLAlchemy==2.0.25
+psycopg2-binary==2.9.9
+requests==2.31.0
+numpy==1.26.4
+pgvector==0.2.4

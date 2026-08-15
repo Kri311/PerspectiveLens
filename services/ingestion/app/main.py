@@ -28,6 +28,18 @@ celery_app.conf.beat_schedule = {
         'task': 'app.tasks.celery_tasks.fetch_google_news',
         'schedule': crontab(minute=0), # every hour
     },
+    'fetch-newsdata-every-hour': {
+        'task': 'app.tasks.celery_tasks.fetch_newsdata_io',
+        'schedule': crontab(minute=15), # 15 past the hour
+    },
+    'fetch-gnews-every-hour': {
+        'task': 'app.tasks.celery_tasks.fetch_gnews_io',
+        'schedule': crontab(minute=30), # 30 past the hour
+    },
+    'fetch-currents-every-hour': {
+        'task': 'app.tasks.celery_tasks.fetch_currents_api',
+        'schedule': crontab(minute=45), # 45 past the hour
+    },
 }
 
 if __name__ == '__main__':
