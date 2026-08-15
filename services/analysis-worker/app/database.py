@@ -1,7 +1,7 @@
 import os
 import uuid
 from datetime import datetime
-from sqlalchemy import create_engine, Column, String, Float, DateTime, Text, ForeignKey, JSON
+from sqlalchemy import create_engine, Column, String, Float, DateTime, Text, ForeignKey, JSON, Integer
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 from pgvector.sqlalchemy import Vector
@@ -26,40 +26,54 @@ class Source(Base):
 class Event(Base):
     __tablename__ = 'events'
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    title = Column(Text)
+    representative_title = Column(Text)
     summary = Column(Text)
-    start_date = Column(DateTime(timezone=True))
-    end_date = Column(DateTime(timezone=True))
-    center_embedding = Column(Vector(768))
-    metadata_ = Column('metadata', JSONB)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
-    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    image_url = Column(Text)
+    first_seen = Column(DateTime(timezone=True), default=datetime.utcnow)
+    last_updated = Column(DateTime(timezone=True), default=datetime.utcnow)
+    status = Column(Text, default='active')
+    cluster_confidence = Column(Float)
+    centroid_embedding = Column(Vector(768))
 
 class Article(Base):
     __tablename__ = 'articles'
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     source_id = Column(UUID(as_uuid=True), ForeignKey('sources.id'), nullable=False)
-    event_id = Column(UUID(as_uuid=True), ForeignKey('events.id'), nullable=True)
+    event_id = Column(UUID(as_uuid=True), ForeignKey('events.id'), nullable=True) # Adding event_id to ORM, we will run ALTER TABLE too
     url = Column(Text, nullable=False, unique=True)
+    canonical_url = Column(Text)
     title = Column(Text)
+    description = Column(Text)
     body = Column(Text)
+    image_url = Column(Text)
+    language = Column(Text, default='ta')
+    author = Column(Text)
     published_at = Column(DateTime(timezone=True))
+    collected_at = Column(DateTime(timezone=True), default=datetime.utcnow)
     content_hash = Column(Text)
+    title_hash = Column(Text)
     status = Column(Text, default='queued')
-    content_embedding = Column(Vector(768))
+    raw_payload = Column(JSONB)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+class Entity(Base):
+    __tablename__ = 'entities'
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    canonical_name = Column(Text, nullable=False, unique=True)
+    entity_type = Column(Text)
+    wikidata_id = Column(Text)
+    aliases = Column(JSONB, default=[])
 
 class ArticleEntity(Base):
     __tablename__ = 'article_entities'
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     article_id = Column(UUID(as_uuid=True), ForeignKey('articles.id', ondelete='CASCADE'), nullable=False)
-    entity_name = Column(Text, nullable=False)
-    entity_type = Column(Text, nullable=False)
+    entity_id = Column(UUID(as_uuid=True), ForeignKey('entities.id', ondelete='CASCADE'), nullable=False)
+    surface_form = Column(Text, nullable=False)
     confidence = Column(Float)
-    start_char = Column(Float)
-    end_char = Column(Float)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    salience = Column(Float)
+    position = Column(Integer)
 
 class ArticleAnalysis(Base):
     __tablename__ = 'article_analysis'

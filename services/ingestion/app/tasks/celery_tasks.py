@@ -95,6 +95,7 @@ def process_articles(provider_name: str, articles_data: list):
                 title=data.get('title'),
                 description=data.get('description'),
                 body=clean_text,
+                image_url=data.get('image_url'),
                 language='ta',
                 published_at=parser.parse(data['published_at']),
                 content_hash=content_hash,
@@ -119,10 +120,19 @@ def process_articles(provider_name: str, articles_data: list):
 
 @shared_task(bind=True)
 def fetch_google_news(self):
-    logger.info("Starting Google News RSS fetch...")
+    logger.info("Starting Google News RSS fetch for specific outlets...")
     provider = GoogleNewsRSSProvider()
-    articles_data = provider.fetch(query="தமிழ்நாடு", limit=50)
-    return process_articles("Google News RSS", articles_data)
+    queries = ["தமிழ்நாடு", "sun news", "thanthi tv", "polimer news", "puthiya thalaimurai", "news18 tamil"]
+    
+    total_ingested = 0
+    total_skipped = 0
+    for q in queries:
+        articles_data = provider.fetch(query=q, limit=20)
+        res = process_articles(f"Google News RSS ({q})", articles_data)
+        total_ingested += res.get("ingested", 0)
+        total_skipped += res.get("skipped", 0)
+        
+    return {"ingested": total_ingested, "skipped": total_skipped}
 
 @shared_task(bind=True)
 def fetch_newsdata_io(self):

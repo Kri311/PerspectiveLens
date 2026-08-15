@@ -47,6 +47,7 @@ class NewsDataIOProvider(NewsProvider):
                         'title': item.get("title"),
                         'published_at': published_at.isoformat(),
                         'description': item.get("description", ""),
+                        'image_url': item.get("image_url", ""),
                         'source_name': item.get("source_id", "NewsData.io Unknown")
                     }
                     articles.append(article_data)

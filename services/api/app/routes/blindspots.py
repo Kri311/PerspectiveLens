@@ -15,7 +15,7 @@ async def get_global_blindspots(db: AsyncSession = Depends(get_db)):
         SELECT 
             b.id,
             b.event_id,
-            e.title as event_title,
+            e.representative_title as event_title,
             b.source_group,
             b.blindspot_type,
             b.score,

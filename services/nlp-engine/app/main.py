@@ -1,6 +1,8 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import logging
+import glob
+import os
 from app.models import nlp_models
 
 logging.basicConfig(level=logging.INFO)
@@ -10,15 +12,23 @@ app = FastAPI(title="PerspectiveLens NLP Engine")
 
 @app.on_event("startup")
 async def startup_event():
+    logger.info("Cleaning up HuggingFace cache locks...")
+    for lock_file in glob.glob("/root/.cache/huggingface/hub/**/*.lock", recursive=True):
+        try:
+            os.remove(lock_file)
+            logger.info(f"Removed ghost lock: {lock_file}")
+        except Exception as e:
+            logger.error(f"Failed to remove lock {lock_file}: {e}")
+            
     logger.info("Starting up NLP Engine...")
-    # Preload models during startup to prevent first-request latency
-    nlp_models.load_models()
+    # Models are now strictly lazy-loaded to prevent OOM
+    pass
 
 class TextRequest(BaseModel):
     text: str
 
 @app.post("/embed")
-async def get_embedding(request: TextRequest):
+def get_embedding(request: TextRequest):
     if not request.text or not request.text.strip():
         raise HTTPException(status_code=400, detail="Text cannot be empty")
         
@@ -30,7 +40,7 @@ async def get_embedding(request: TextRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/ner")
-async def get_ner(request: TextRequest):
+def get_ner(request: TextRequest):
     if not request.text or not request.text.strip():
         raise HTTPException(status_code=400, detail="Text cannot be empty")
         
@@ -42,7 +52,7 @@ async def get_ner(request: TextRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/sentiment")
-async def get_sentiment(request: TextRequest):
+def get_sentiment(request: TextRequest):
     if not request.text or not request.text.strip():
         raise HTTPException(status_code=400, detail="Text cannot be empty")
         
@@ -64,7 +74,7 @@ async def get_sentiment(request: TextRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/framing")
-async def get_framing(request: TextRequest):
+def get_framing(request: TextRequest):
     if not request.text or not request.text.strip():
         raise HTTPException(status_code=400, detail="Text cannot be empty")
         
@@ -96,7 +106,7 @@ class StanceRequest(BaseModel):
     target_entity: str
 
 @app.post("/stance")
-async def get_stance(request: StanceRequest):
+def get_stance(request: StanceRequest):
     if not request.text or not request.text.strip():
         raise HTTPException(status_code=400, detail="Text cannot be empty")
     if not request.target_entity or not request.target_entity.strip():
@@ -130,7 +140,7 @@ class NLIRequest(BaseModel):
     hypothesis: str
 
 @app.post("/nli")
-async def get_nli(request: NLIRequest):
+def get_nli(request: NLIRequest):
     if not request.premise or not request.premise.strip():
         raise HTTPException(status_code=400, detail="Premise cannot be empty")
     if not request.hypothesis or not request.hypothesis.strip():
@@ -141,6 +151,26 @@ async def get_nli(request: NLIRequest):
         return result
     except Exception as e:
         logger.error(f"Error analyzing NLI: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/summarize")
+async def generate_summary(payload: dict):
+    """
+    Generates an abstractive summary in Tamil using mT5.
+    Expects structured evidence concatenated into a prompt.
+    """
+    text = payload.get("text", "")
+    max_length = payload.get("max_length", 150)
+    
+    if not text:
+        raise HTTPException(status_code=400, detail="Missing text")
+        
+    try:
+        from app.summarization.mt5_summarizer import summarizer_instance
+        summary = summarizer_instance.summarize(text, max_length=max_length)
+        return {"summary": summary}
+    except Exception as e:
+        logger.error(f"Summarization error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/health")
