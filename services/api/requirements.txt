@@ -7,3 +7,5 @@ pydantic-settings==2.9.1
 python-dotenv==1.1.0
 redis==5.3.0
 httpx==0.28.1
+deep-translator==1.11.4
+async-lru==2.3.0

@@ -1,5 +1,6 @@
 from transformers import pipeline
 import logging
+import torch
 
 logger = logging.getLogger(__name__)
 
@@ -10,7 +11,10 @@ class MT5Summarizer:
     def load_model(self):
         if self.pipeline is None:
             logger.info("Loading mT5 Summarization model (csebuetnlp/mT5_multilingual_XLSum)...")
-            self.pipeline = pipeline("summarization", model="csebuetnlp/mT5_multilingual_XLSum")
+            device = 0 if torch.cuda.is_available() else -1
+            if device == 0:
+                logger.info("CUDA is available, using GPU for mT5 model.")
+            self.pipeline = pipeline("summarization", model="csebuetnlp/mT5_multilingual_XLSum", device=device)
 
     def summarize(self, text: str, max_length: int = 150, min_length: int = 30) -> str:
         if self.pipeline is None:

@@ -1,5 +1,8 @@
 import logging
 import requests
+import os
+import uuid
+import shutil
 from typing import Optional
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
@@ -14,8 +17,39 @@ from app.normalization.boilerplate import extract_article_text
 from app.normalization.unicode import normalize_tamil_text
 from app.deduplication.language_filter import is_tamil
 from app.deduplication.hashing import generate_content_hash, generate_url_hash
+from bs4 import BeautifulSoup
 
 logger = logging.getLogger(__name__)
+
+def extract_og_image(html_content: str) -> Optional[str]:
+    try:
+        soup = BeautifulSoup(html_content, 'html.parser')
+        og_image = soup.find('meta', property='og:image')
+        if og_image and og_image.get('content'):
+            return og_image['content']
+    except Exception:
+        pass
+    return None
+
+def download_image(url: str) -> Optional[str]:
+    if not url:
+        return None
+    try:
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        response = requests.get(url, headers=headers, stream=True, timeout=5)
+        if response.status_code == 200:
+            ext = url.split('.')[-1].split('?')[0]
+            if len(ext) > 4 or not ext.isalnum():
+                ext = 'jpg'
+            filename = f"{uuid.uuid4().hex}.{ext}"
+            filepath = os.path.join('/app/media', filename)
+            with open(filepath, 'wb') as f:
+                shutil.copyfileobj(response.raw, f)
+            # Return absolute URL for frontend consumption
+            return f"http://localhost:8000/media/{filename}"
+    except Exception as e:
+        logger.error(f"Failed to download image {url}: {e}")
+    return url  # Fallback to remote URL if download fails
 
 def get_or_create_source(db: Session, source_name: str) -> Source:
     source = db.query(Source).filter(Source.name == source_name).first()
@@ -88,6 +122,15 @@ def process_articles(provider_name: str, articles_data: list):
             source_name = data.get('source_name') or f'{provider_name} Unknown'
             source = get_or_create_source(db, source_name)
             
+            # Extract high quality image from meta tags if RSS didn't provide one
+            image_url = data.get('image_url')
+            if not image_url or image_url.strip() == "":
+                image_url = extract_og_image(html)
+            
+            # Download the image locally to avoid hotlinking
+            if image_url:
+                image_url = download_image(image_url)
+            
             # Insert into database
             article = Article(
                 source_id=source.id,
@@ -95,7 +138,7 @@ def process_articles(provider_name: str, articles_data: list):
                 title=data.get('title'),
                 description=data.get('description'),
                 body=clean_text,
-                image_url=data.get('image_url'),
+                image_url=image_url,
                 language='ta',
                 published_at=parser.parse(data['published_at']),
                 content_hash=content_hash,
@@ -138,19 +181,19 @@ def fetch_google_news(self):
 def fetch_newsdata_io(self):
     logger.info("Starting NewsData.io API fetch...")
     provider = NewsDataIOProvider()
-    articles_data = provider.fetch(query="தமிழ்நாடு", limit=50)
+    articles_data = provider.fetch(query="தமிழ்நாடு", limit=10)
     return process_articles("NewsData.io API", articles_data)
 
 @shared_task(bind=True)
 def fetch_gnews_io(self):
     logger.info("Starting GNews.io API fetch...")
     provider = GNewsIOProvider()
-    articles_data = provider.fetch(query="தமிழ்நாடு", limit=50)
+    articles_data = provider.fetch(query="தமிழ்நாடு", limit=10)
     return process_articles("GNews.io API", articles_data)
 
 @shared_task(bind=True)
 def fetch_currents_api(self):
     logger.info("Starting Currents API fetch...")
     provider = CurrentsAPIProvider()
-    articles_data = provider.fetch(query="தமிழ்நாடு", limit=50)
+    articles_data = provider.fetch(query="தமிழ்நாடு", limit=10)
     return process_articles("Currents API", articles_data)
