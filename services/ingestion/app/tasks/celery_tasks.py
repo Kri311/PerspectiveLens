@@ -1,0 +1,120 @@
+import logging
+import requests
+from typing import Optional
+from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
+from celery import shared_task
+from dateutil import parser
+from app.database import SessionLocal, Article, Source
+from app.providers.google_news import GoogleNewsRSSProvider
+from app.normalization.boilerplate import extract_article_text
+from app.normalization.unicode import normalize_tamil_text
+from app.deduplication.language_filter import is_tamil
+from app.deduplication.hashing import generate_content_hash, generate_url_hash
+
+logger = logging.getLogger(__name__)
+
+def get_or_create_source(db: Session, source_name: str) -> Source:
+    source = db.query(Source).filter(Source.name == source_name).first()
+    if not source:
+        source = Source(name=source_name, orientation="OTHER_UNKNOWN")
+        db.add(source)
+        db.commit()
+        db.refresh(source)
+    return source
+
+def fetch_html(url: str) -> Optional[str]:
+    try:
+        # Avoid getting blocked by basic bots protection
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+        # Google News RSS URLs are often redirects, resolve them
+        response = requests.get(url, headers=headers, timeout=10, allow_redirects=True)
+        response.raise_for_status()
+        return response.text
+    except Exception as e:
+        logger.error(f"Failed to fetch HTML for {url}: {e}")
+        return None
+
+@shared_task(bind=True)
+def fetch_google_news(self):
+    logger.info("Starting Google News RSS fetch...")
+    provider = GoogleNewsRSSProvider()
+    articles_data = provider.fetch(query="தமிழ்நாடு", limit=50)
+    
+    db: Session = SessionLocal()
+    success_count = 0
+    skip_count = 0
+    
+    try:
+        for data in articles_data:
+            url = data['url']
+            
+            # Check if URL already exists
+            if db.query(Article).filter(Article.url == url).first():
+                skip_count += 1
+                continue
+                
+            # Fetch raw HTML
+            html = fetch_html(url)
+            if not html:
+                skip_count += 1
+                continue
+                
+            # Extract boilerplate-free text
+            raw_text = extract_article_text(html)
+            
+            # Normalize unicode
+            clean_text = normalize_tamil_text(raw_text)
+            
+            # Validate language
+            if not is_tamil(clean_text):
+                logger.info(f"Skipping non-Tamil or low-confidence article: {url}")
+                skip_count += 1
+                continue
+                
+            # Generate deduplication hash
+            content_hash = generate_content_hash(clean_text)
+            if not content_hash:
+                skip_count += 1
+                continue
+                
+            # Check for exact content duplicate across all sources
+            if db.query(Article).filter(Article.content_hash == content_hash).first():
+                logger.info(f"Skipping content duplicate: {url}")
+                skip_count += 1
+                continue
+                
+            # Source resolution
+            source_name = data.get('source_name') or 'Google News Unknown'
+            source = get_or_create_source(db, source_name)
+            
+            # Insert into database
+            article = Article(
+                source_id=source.id,
+                url=url,
+                title=data.get('title'),
+                description=data.get('description'),
+                body=clean_text,
+                language='ta',
+                published_at=parser.parse(data['published_at']),
+                content_hash=content_hash,
+                status='queued'
+            )
+            
+            try:
+                db.add(article)
+                db.commit()
+                success_count += 1
+                logger.info(f"Ingested new article: {url}")
+            except IntegrityError:
+                db.rollback()
+                logger.warning(f"Integrity error (likely duplicate URL) for {url}")
+                skip_count += 1
+                
+    finally:
+        db.close()
+        
+    logger.info(f"Google News fetch complete. Ingested: {success_count}, Skipped: {skip_count}")
+    return {"ingested": success_count, "skipped": skip_count}
