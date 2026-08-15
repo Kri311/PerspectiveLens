@@ -61,6 +61,8 @@ Desktop.ini
 # ---------- Large data ----------
 datasets/raw/
 datasets/processed/
+media/
+test_rss.xml
 
 # ---------- Testing / Coverage ----------
 .coverage

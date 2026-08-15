@@ -5,7 +5,7 @@ from typing import Optional, List, Dict
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from celery import shared_task
-from app.database import SessionLocal, Article, Event, ArticleEntity, ArticleAnalysis, Claim
+from app.database import SessionLocal, Article, Event, ArticleEntity, ArticleAnalysis, Claim, Entity
 from app.claims.extraction import extract_claims_heuristic
 from app.claims.nli_comparison import compare_claims
 
@@ -16,7 +16,7 @@ SIMILARITY_THRESHOLD = 0.82  # Cosine similarity threshold for event matching
 
 def get_embedding(text: str) -> Optional[List[float]]:
     try:
-        resp = requests.post(f"{NLP_ENGINE_URL}/embed", json={"text": text}, timeout=10)
+        resp = requests.post(f"{NLP_ENGINE_URL}/embed", json={"text": text}, timeout=60)
         resp.raise_for_status()
         return resp.json().get("embedding")
     except Exception as e:
@@ -25,7 +25,7 @@ def get_embedding(text: str) -> Optional[List[float]]:
 
 def get_entities(text: str) -> List[Dict]:
     try:
-        resp = requests.post(f"{NLP_ENGINE_URL}/ner", json={"text": text}, timeout=10)
+        resp = requests.post(f"{NLP_ENGINE_URL}/ner", json={"text": text}, timeout=60)
         resp.raise_for_status()
         return resp.json().get("entities", [])
     except Exception as e:
@@ -34,7 +34,7 @@ def get_entities(text: str) -> List[Dict]:
 
 def get_sentiment(text: str) -> Dict:
     try:
-        resp = requests.post(f"{NLP_ENGINE_URL}/sentiment", json={"text": text}, timeout=10)
+        resp = requests.post(f"{NLP_ENGINE_URL}/sentiment", json={"text": text}, timeout=60)
         resp.raise_for_status()
         return resp.json()
     except Exception as e:
@@ -43,7 +43,7 @@ def get_sentiment(text: str) -> Dict:
 
 def get_framing(text: str) -> Dict:
     try:
-        resp = requests.post(f"{NLP_ENGINE_URL}/framing", json={"text": text}, timeout=10)
+        resp = requests.post(f"{NLP_ENGINE_URL}/framing", json={"text": text}, timeout=60)
         resp.raise_for_status()
         return resp.json()
     except Exception as e:
@@ -52,7 +52,7 @@ def get_framing(text: str) -> Dict:
 
 def get_stance(text: str, target_entity: str) -> Dict:
     try:
-        resp = requests.post(f"{NLP_ENGINE_URL}/stance", json={"text": text, "target_entity": target_entity}, timeout=10)
+        resp = requests.post(f"{NLP_ENGINE_URL}/stance", json={"text": text, "target_entity": target_entity}, timeout=60)
         resp.raise_for_status()
         return resp.json()
     except Exception as e:
@@ -70,9 +70,9 @@ def resolve_event(db: Session, article: Article, embedding: List[float]) -> Even
     
     # We use raw SQL with pgvector to find the closest event
     query = text("""
-        SELECT id, title, center_embedding <=> :embedding AS distance
+        SELECT id, representative_title as title, centroid_embedding <=> :embedding AS distance
         FROM events
-        WHERE center_embedding <=> :embedding < :threshold
+        WHERE centroid_embedding <=> :embedding < :threshold
         ORDER BY distance ASC
         LIMIT 1
     """)
@@ -85,20 +85,14 @@ def resolve_event(db: Session, article: Article, embedding: List[float]) -> Even
     if result:
         logger.info(f"Matched article to existing event: {result.id} (distance: {result.distance:.3f})")
         event = db.query(Event).filter(Event.id == result.id).first()
-        
-        # Optionally update the center_embedding (running average)
-        # For MVP, we can keep the first article's embedding as the cluster center
-        
         return event
     else:
         logger.info("No matching event found. Creating new event.")
         new_event = Event(
-            title=article.title,
+            representative_title=article.title,
             summary=article.description or article.title,
-            start_date=article.published_at,
-            end_date=article.published_at,
-            center_embedding=embedding,
-            metadata_={"article_count": 1}
+            image_url=article.image_url,
+            centroid_embedding=embedding
         )
         db.add(new_event)
         db.flush() # flush to get the ID
@@ -124,7 +118,8 @@ def process_queued_articles(self):
             logger.info(f"Processing article: {article.id}")
             
             # Use title + lead paragraph for embeddings (more dense information)
-            text_to_embed = f"{article.title}. {article.body[:500]}"
+            body_text = article.body or ""
+            text_to_embed = f"{article.title}. {body_text[:500]}"
             
             # 1. Get Embedding
             embedding = get_embedding(text_to_embed)
@@ -132,21 +127,40 @@ def process_queued_articles(self):
                 logger.warning(f"Failed to get embedding for {article.id}")
                 continue
                 
-            article.content_embedding = embedding
+            # No content_embedding column in articles, skipping assignment
             
             # 2. Get Entities
             entities_data = get_entities(text_to_embed)
+            
+            # Map NER output to DB enum
+            ner_type_map = {
+                'PER': 'PERSON',
+                'ORG': 'ORGANIZATION',
+                'LOC': 'LOCATION',
+                'MISC': 'EVENT'
+            }
+            
             for ent in entities_data:
-                # Store entities
-                db_entity = ArticleEntity(
+                canonical_name = ent['word'].strip()
+                ner_type = ent['entity_group']
+                mapped_type = ner_type_map.get(ner_type, 'EVENT')
+                
+                # Upsert Entity
+                db_ent = db.query(Entity).filter(Entity.canonical_name == canonical_name).first()
+                if not db_ent:
+                    db_ent = Entity(canonical_name=canonical_name, entity_type=mapped_type)
+                    db.add(db_ent)
+                    db.flush()
+                
+                # Store ArticleEntity linking
+                db_article_entity = ArticleEntity(
                     article_id=article.id,
-                    entity_name=ent['word'],
-                    entity_type=ent['entity_group'],
+                    entity_id=db_ent.id,
+                    surface_form=canonical_name,
                     confidence=ent['score'],
-                    start_char=ent['start'],
-                    end_char=ent['end']
+                    position=ent['start']
                 )
-                db.add(db_entity)
+                db.add(db_article_entity)
             
             # 3. Resolve Event
             event = resolve_event(db, article, embedding)
@@ -197,6 +211,9 @@ def process_queued_articles(self):
             db.commit()
             processed_count += 1
             
+            # Enqueue summary generation now that claims are added
+            generate_event_summary_task.delay(str(event.id))
+            
         logger.info(f"Analysis worker processed {processed_count} articles.")
         return {"processed": processed_count}
         
@@ -206,3 +223,23 @@ def process_queued_articles(self):
         raise self.retry(exc=e, countdown=60)
     finally:
         db.close()
+
+@shared_task
+def generate_event_summary_task(event_id: str):
+    """Generates an event summary using extracted claims."""
+    with SessionLocal() as db:
+        event = db.query(Event).filter(Event.id == event_id).first()
+        if not event:
+            return
+            
+        claims = db.query(Claim).filter(Claim.event_id == event_id).all()
+        if not claims:
+            return
+            
+        from app.summary.event_summary import generate_evidence_based_summary
+        summary = generate_evidence_based_summary(claims)
+        
+        if summary:
+            event.summary = summary
+            db.commit()
+            logger.info(f"Generated summary for event {event_id}")

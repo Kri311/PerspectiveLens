@@ -121,6 +121,7 @@ CREATE TABLE articles (
     title           TEXT,
     description     TEXT,
     body            TEXT,
+    image_url       TEXT,
     language        TEXT DEFAULT 'ta',
     author          TEXT,
     published_at    TIMESTAMPTZ,
@@ -232,6 +233,8 @@ CREATE TABLE events (
     id                      UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     representative_title    TEXT,
     summary                 TEXT,
+    image_url               TEXT,
+    tags                    TEXT[],
     first_seen              TIMESTAMPTZ DEFAULT NOW(),
     last_updated            TIMESTAMPTZ DEFAULT NOW(),
     status                  TEXT DEFAULT 'active' CHECK (status IN (

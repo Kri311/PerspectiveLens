@@ -41,6 +41,7 @@ class Article(Base):
     title = Column(Text)
     description = Column(Text)
     body = Column(Text)
+    image_url = Column(Text)
     language = Column(Text, default='ta')
     author = Column(Text)
     published_at = Column(DateTime(timezone=True))

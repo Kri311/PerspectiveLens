@@ -28,12 +28,19 @@ class GoogleNewsRSSProvider(NewsProvider):
             try:
                 published_at = parser.parse(entry.published) if hasattr(entry, 'published') else datetime.utcnow()
                 
-                # We do not fetch the full text here. We will fetch the HTML by visiting the link.
+                # Extract image if available
+                image_url = ""
+                if hasattr(entry, 'media_content') and len(entry.media_content) > 0:
+                    image_url = entry.media_content[0].get('url', '')
+                elif hasattr(entry, 'media_thumbnail') and len(entry.media_thumbnail) > 0:
+                    image_url = entry.media_thumbnail[0].get('url', '')
+                    
                 article_data = {
                     'url': entry.link,
                     'title': entry.title,
                     'published_at': published_at.isoformat(),
                     'description': entry.summary if hasattr(entry, 'summary') else "",
+                    'image_url': image_url,
                     'source_name': entry.source.title if hasattr(entry, 'source') else ""
                 }
                 articles.append(article_data)

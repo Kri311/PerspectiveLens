@@ -1,12 +1,13 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.dependencies.database import get_db
+from .events import translate_text
 
 router = APIRouter(prefix="/blindspots", tags=["blindspots"])
 
 @router.get("/")
-async def get_global_blindspots(db: AsyncSession = Depends(get_db)):
+async def get_global_blindspots(lang: str = Query("en", description="Language code (en or ta)"), db: AsyncSession = Depends(get_db)):
     """
     Returns a global feed of active blindspots across all events, 
     ranked by severity score.
@@ -15,7 +16,7 @@ async def get_global_blindspots(db: AsyncSession = Depends(get_db)):
         SELECT 
             b.id,
             b.event_id,
-            e.title as event_title,
+            e.representative_title as event_title,
             b.source_group,
             b.blindspot_type,
             b.score,
@@ -33,10 +34,11 @@ async def get_global_blindspots(db: AsyncSession = Depends(get_db)):
     
     blindspots = []
     for row in rows:
+        title_translated = await translate_text(row.event_title, lang) if row.event_title else None
         blindspots.append({
             "id": str(row.id),
             "event_id": str(row.event_id),
-            "event_title": row.event_title,
+            "event_title": title_translated,
             "source_group": row.source_group,
             "blindspot_type": row.blindspot_type,
             "score": row.score,

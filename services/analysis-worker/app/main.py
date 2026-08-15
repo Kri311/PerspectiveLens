@@ -27,9 +27,9 @@ celery_app.conf.update(
 )
 
 celery_app.conf.beat_schedule = {
-    'process-queued-articles-every-5-mins': {
+    'process-queued-articles-every-15-secs': {
         'task': 'app.tasks.process_queued_articles',
-        'schedule': crontab(minute='*/5'),
+        'schedule': 15.0,
     },
 }
 
