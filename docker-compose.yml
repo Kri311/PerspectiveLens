@@ -70,6 +70,26 @@ services:
     networks:
       - perslens-network
 
+  # ------------------------------------------
+  # Ingestion Worker (Celery + Background Jobs)
+  # ------------------------------------------
+  ingestion-worker:
+    build:
+      context: ./services/ingestion
+    container_name: perslens-ingestion
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./services/ingestion/app:/app/app  # hot reload in dev
+    restart: unless-stopped
+    networks:
+      - perslens-network
+
 # ------------------------------------------
 # Persistent Volumes
 # ------------------------------------------
