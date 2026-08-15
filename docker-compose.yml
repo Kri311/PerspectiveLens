@@ -1,0 +1,105 @@
+# ============================================
+# PerspectiveLens — Docker Compose
+# Tamil News Intelligence Platform
+# ============================================
+
+services:
+  # ------------------------------------------
+  # PostgreSQL + pgvector
+  # ------------------------------------------
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: perslens-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d  # auto-run schema on first boot
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U perslens"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - perslens-network
+
+  # ------------------------------------------
+  # Redis (caching & task queue)
+  # ------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: perslens-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - perslens-network
+
+  # ------------------------------------------
+  # FastAPI Application
+  # ------------------------------------------
+  api:
+    build:
+      context: ./services/api
+    container_name: perslens-api
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./services/api/app:/app/app  # hot reload in dev
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    restart: unless-stopped
+    networks:
+      - perslens-network
+
+  # ------------------------------------------
+  # Ingestion Worker (Celery + Background Jobs)
+  # ------------------------------------------
+  ingestion-worker:
+    build:
+      context: ./services/ingestion
+    container_name: perslens-ingestion
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./services/ingestion/app:/app/app  # hot reload in dev
+    restart: unless-stopped
+    networks:
+      - perslens-network
+
+# ------------------------------------------
+# Persistent Volumes
+# ------------------------------------------
+volumes:
+  postgres_data:
+  redis_data:
+
+# ------------------------------------------
+# Networks
+# ------------------------------------------
+networks:
+  perslens-network:
+    driver: bridge
