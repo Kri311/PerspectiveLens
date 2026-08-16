@@ -81,17 +81,60 @@ class NLPModels:
         return clean_entities
 
     def get_classification(self, text: str, candidate_labels: list[str]) -> dict:
-        return {
-            "sequence": text,
-            "labels": candidate_labels,
-            "scores": [0.9] + [0.1 / (len(candidate_labels) - 1)] * (len(candidate_labels) - 1)
-        }
+        self.load_zero_shot_model()
+        try:
+            result = self.zero_shot_pipeline(text, candidate_labels=candidate_labels, multi_label=False)
+            return {
+                "sequence": result.get("sequence", text),
+                "labels": result.get("labels", candidate_labels),
+                "scores": [float(s) for s in result.get("scores", [1.0 / len(candidate_labels)] * len(candidate_labels))]
+            }
+        except Exception as e:
+            logger.error(f"Zero-shot classification error: {e}")
+            # Fallback to uniform distribution
+            n = len(candidate_labels)
+            return {
+                "sequence": text,
+                "labels": candidate_labels,
+                "scores": [1.0 / n] * n
+            }
         
     def get_nli(self, premise: str, hypothesis: str) -> dict:
-        return {
-            "prediction": "ENTAILMENT",
-            "confidence": 0.85,
-            "distribution": {"ENTAILMENT": 0.85, "NEUTRAL": 0.1, "CONTRADICTION": 0.05}
-        }
+        self.load_nli_model()
+        try:
+            input_text = f"{premise} [SEP] {hypothesis}"
+            result = self.nli_pipeline(input_text)
+            
+            # result is a list of lists of dicts: [[{"label": ..., "score": ...}, ...]]
+            scores_list = result[0] if isinstance(result[0], list) else result
+            
+            label_map = {
+                "ENTAILMENT": "ENTAILMENT",
+                "NEUTRAL": "NEUTRAL", 
+                "CONTRADICTION": "CONTRADICTION",
+                "entailment": "ENTAILMENT",
+                "neutral": "NEUTRAL",
+                "contradiction": "CONTRADICTION",
+            }
+            
+            distribution = {}
+            for item in scores_list:
+                label = label_map.get(item["label"], item["label"].upper())
+                distribution[label] = float(item["score"])
+            
+            prediction = max(distribution, key=distribution.get)
+            
+            return {
+                "prediction": prediction,
+                "confidence": distribution[prediction],
+                "distribution": distribution
+            }
+        except Exception as e:
+            logger.error(f"NLI error: {e}")
+            return {
+                "prediction": "ENTAILMENT",
+                "confidence": 0.33,
+                "distribution": {"ENTAILMENT": 0.33, "NEUTRAL": 0.34, "CONTRADICTION": 0.33}
+            }
 
 nlp_models = NLPModels.get_instance()

@@ -17,6 +17,7 @@ async def get_global_blindspots(lang: str = Query("en", description="Language co
             b.id,
             b.event_id,
             e.representative_title as event_title,
+            e.image_url as event_image_url,
             b.source_group,
             b.blindspot_type,
             b.score,
@@ -35,15 +36,25 @@ async def get_global_blindspots(lang: str = Query("en", description="Language co
     blindspots = []
     for row in rows:
         title_translated = await translate_text(row.event_title, lang) if row.event_title else None
+        type_translated = await translate_text(row.blindspot_type, lang) if row.blindspot_type else row.blindspot_type
+        
+        # Translate evidence reason if present
+        evidence = row.evidence if row.evidence else {}
+        if isinstance(evidence, dict) and evidence.get('reason'):
+            evidence = dict(evidence)
+            evidence['reason'] = await translate_text(evidence['reason'], lang)
+        
         blindspots.append({
             "id": str(row.id),
             "event_id": str(row.event_id),
             "event_title": title_translated,
+            "image_url": row.event_image_url,
             "source_group": row.source_group,
-            "blindspot_type": row.blindspot_type,
+            "blindspot_type": type_translated,
             "score": row.score,
-            "evidence": row.evidence,
+            "evidence": evidence,
             "created_at": row.created_at
         })
         
     return {"blindspots": blindspots}
+

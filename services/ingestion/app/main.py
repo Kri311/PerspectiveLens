@@ -24,9 +24,9 @@ celery_app.conf.update(
 
 # Configure Celery Beat scheduler
 celery_app.conf.beat_schedule = {
-    'fetch-google-news-every-hour': {
+    'fetch-google-news-frequently': {
         'task': 'app.tasks.celery_tasks.fetch_google_news',
-        'schedule': crontab(minute=0), # every hour
+        'schedule': crontab(minute='*/15'), # every 15 minutes
     },
     'fetch-newsdata-every-hour': {
         'task': 'app.tasks.celery_tasks.fetch_newsdata_io',
@@ -39,6 +39,10 @@ celery_app.conf.beat_schedule = {
     'fetch-currents-every-hour': {
         'task': 'app.tasks.celery_tasks.fetch_currents_api',
         'schedule': crontab(minute=45), # 45 past the hour
+    },
+    'fetch-tamil-tv-rss-frequently': {
+        'task': 'app.tasks.celery_tasks.fetch_tamil_tv_rss',
+        'schedule': crontab(minute='*/10'), # every 10 minutes
     },
 }
 

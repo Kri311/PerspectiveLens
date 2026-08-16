@@ -226,20 +226,46 @@ def process_queued_articles(self):
 
 @shared_task
 def generate_event_summary_task(event_id: str):
-    """Generates an event summary using extracted claims."""
+    """Generates an event summary using extracted claims or article text."""
     with SessionLocal() as db:
         event = db.query(Event).filter(Event.id == event_id).first()
         if not event:
             return
             
         claims = db.query(Claim).filter(Claim.event_id == event_id).all()
-        if not claims:
+        
+        text_to_summarize = ""
+        if claims:
+            text_to_summarize = " ".join([c.claim_text for c in claims[:5]])
+        else:
+            # Fallback to the longest article body in this event
+            articles = db.query(Article).filter(Article.event_id == event_id).all()
+            if articles:
+                best_article = max(articles, key=lambda a: len(a.body or ""))
+                text_to_summarize = f"{best_article.title}. {best_article.body[:800]}"
+            else:
+                text_to_summarize = event.summary
+                
+        if not text_to_summarize:
             return
             
         from app.summary.event_summary import generate_evidence_based_summary
-        summary = generate_evidence_based_summary(claims)
         
-        if summary:
-            event.summary = summary
-            db.commit()
-            logger.info(f"Generated summary for event {event_id}")
+        # We bypass generate_evidence_based_summary internally since we built the text
+        import requests
+        NLP_ENGINE_URL = os.getenv("NLP_ENGINE_URL", "http://nlp-engine:8001")
+        try:
+            prompt = f"Summarize the following in Tamil: {text_to_summarize}"
+            resp = requests.post(f"{NLP_ENGINE_URL}/summarize", json={
+                "text": prompt,
+                "max_length": 100
+            }, timeout=60)
+            resp.raise_for_status()
+            summary = resp.json().get("summary", "")
+            
+            if summary:
+                event.summary = summary
+                db.commit()
+                logger.info(f"Generated summary for event {event_id}")
+        except Exception as e:
+            logger.error(f"Error generating summary for event {event_id}: {e}")

@@ -5,12 +5,69 @@ from app.dependencies.database import get_db
 import uuid
 import asyncio
 import logging
+import re
 from async_lru import alru_cache
 from deep_translator import GoogleTranslator
 
 router = APIRouter(prefix="/events", tags=["events"])
 
 logger = logging.getLogger(__name__)
+
+# Canonical source name mapping for deduplication
+SOURCE_NAME_ALIASES = {
+    "daily thanthi": "Daily Thanthi",
+    "dailythanthi": "Daily Thanthi",
+    "thanthi": "Daily Thanthi",
+    "தினத்தந்தி": "Daily Thanthi",
+    "dinamalar": "Dinamalar",
+    "தினமலர்": "Dinamalar",
+    "vikatan": "Vikatan",
+    "விகடன்": "Vikatan",
+    "dinamani": "Dinamani",
+    "தினமணி": "Dinamani",
+    "sun news": "Sun News",
+    "sun tv": "Sun News",
+    "kalaignar tv": "Kalaignar TV",
+    "kalaignar": "Kalaignar TV",
+    "jaya tv": "Jaya TV",
+    "jaya news": "Jaya TV",
+    "thanthi tv": "Thanthi TV",
+    "polimer news": "Polimer News",
+    "polimer": "Polimer News",
+    "puthiya thalaimurai": "Puthiya Thalaimurai",
+    "puthiyathalaimurai": "Puthiya Thalaimurai",
+    "news18 tamil": "News18 Tamil",
+    "news 18 tamil": "News18 Tamil",
+    "oneindia tamil": "OneIndia Tamil",
+    "the hindu": "The Hindu",
+    "hindu": "The Hindu",
+    "ndtv": "NDTV",
+    "zee tamil": "Zee Tamil",
+    "india today": "India Today",
+}
+
+def normalize_source_name(name: str) -> str:
+    """Normalize source name to canonical form."""
+    if not name:
+        return name
+    lookup = name.strip().lower()
+    # Remove common suffixes for matching
+    lookup_clean = re.sub(r'\s*(news|tv|online|digital|web)\s*$', '', lookup).strip()
+    return SOURCE_NAME_ALIASES.get(lookup, SOURCE_NAME_ALIASES.get(lookup_clean, name.strip().title()))
+
+# Orientation category mapping for bias distribution
+ORIENTATION_CATEGORIES = {
+    'DMK_ORIENTED': 'dravidian',
+    'DRAVIDIAN': 'dravidian',
+    'AIADMK_ORIENTED': 'aiadmk',
+    'AIADMK': 'aiadmk',
+    'BJP_ORIENTED': 'conservative',
+    'CONSERVATIVE': 'conservative',
+    'RIGHT_ORIENTED': 'conservative',
+    'INDEPENDENT': 'independent',
+    'OTHER_UNKNOWN': 'independent',
+    'NEUTRAL': 'independent',
+}
 
 @alru_cache(maxsize=1000)
 async def translate_text(text: str, target_lang: str) -> str:
@@ -25,11 +82,12 @@ async def translate_text(text: str, target_lang: str) -> str:
 
 @router.get("/")
 async def get_events(lang: str = Query("en", description="Language code (en or ta)"), db: AsyncSession = Depends(get_db)):
-    """Returns a list of all events."""
+    """Returns a list of all events with dynamic orientation distribution."""
     query = text("""
         SELECT e.id, e.representative_title, e.summary, e.first_seen, e.status, 
                e.image_url, e.tags,
-               COUNT(a.id) as article_count, COUNT(DISTINCT a.source_id) as source_count
+               COUNT(a.id) as article_count, COUNT(DISTINCT a.source_id) as source_count,
+               MAX(a.image_url) as article_image_url
         FROM events e
         LEFT JOIN articles a ON a.event_id = e.id
         GROUP BY e.id
@@ -39,10 +97,31 @@ async def get_events(lang: str = Query("en", description="Language code (en or t
     result = await db.execute(query)
     rows = result.fetchall()
     
+    # Fetch orientation distribution for all events in one query
+    orientation_query = text("""
+        SELECT a.event_id, s.orientation, COUNT(*) as cnt
+        FROM articles a
+        JOIN sources s ON s.id = a.source_id
+        WHERE a.event_id IS NOT NULL
+        GROUP BY a.event_id, s.orientation
+    """)
+    orient_result = await db.execute(orientation_query)
+    orient_rows = orient_result.fetchall()
+    
+    # Build orientation map: event_id -> {dravidian: N, aiadmk: N, conservative: N, independent: N}
+    orient_map = {}
+    for orow in orient_rows:
+        eid = str(orow.event_id)
+        if eid not in orient_map:
+            orient_map[eid] = {'dravidian': 0, 'aiadmk': 0, 'conservative': 0, 'independent': 0}
+        category = ORIENTATION_CATEGORIES.get(orow.orientation, 'independent')
+        orient_map[eid][category] += orow.cnt
+    
     events = []
     for row in rows:
-        # Fallback image if null
-        img = row.image_url if hasattr(row, 'image_url') and row.image_url else "https://images.unsplash.com/photo-1572949645841-094f3a9c4c94?q=80&w=800&auto=format&fit=crop"
+        # Fallback image if null: check event image, then article image
+        raw_img = getattr(row, 'image_url', None) or getattr(row, 'article_image_url', None)
+        img = raw_img if raw_img else "https://images.unsplash.com/photo-1585829365295-ab7cd400c167?q=80&w=800&auto=format&fit=crop"
         
         # Determine some mock tags based on title if tags is null
         tags = row.tags if hasattr(row, 'tags') and row.tags else []
@@ -63,12 +142,30 @@ async def get_events(lang: str = Query("en", description="Language code (en or t
             else:
                 tags = ["Tamil Nadu", "Breaking News"]
                 
+        # Translate tags if needed
+        translated_tags = []
+        for tag in tags:
+            ttag = await translate_text(tag, lang) if tag else None
+            if ttag:
+                translated_tags.append(ttag)
+        tags = translated_tags
         
         title_translated = await translate_text(row.representative_title, lang) if row.representative_title else None
         summary_translated = await translate_text(row.summary, lang) if row.summary else None
 
+        # Calculate bias distribution percentages
+        eid = str(row.id)
+        raw_orient = orient_map.get(eid, {'dravidian': 0, 'aiadmk': 0, 'conservative': 0, 'independent': 0})
+        total = sum(raw_orient.values()) or 1
+        bias = {
+            'dravidian': round((raw_orient['dravidian'] / total) * 100),
+            'aiadmk': round((raw_orient['aiadmk'] / total) * 100),
+            'conservative': round((raw_orient['conservative'] / total) * 100),
+            'independent': round((raw_orient['independent'] / total) * 100),
+        }
+
         events.append({
-            "id": str(row.id),
+            "id": eid,
             "title": title_translated,
             "summary": summary_translated,
             "first_seen": row.first_seen,
@@ -76,7 +173,8 @@ async def get_events(lang: str = Query("en", description="Language code (en or t
             "article_count": row.article_count,
             "source_count": row.source_count,
             "image_url": img,
-            "tags": tags
+            "tags": tags,
+            "bias": bias
         })
     return events
 

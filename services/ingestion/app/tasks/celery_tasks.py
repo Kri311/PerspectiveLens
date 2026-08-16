@@ -13,6 +13,7 @@ from app.providers.google_news import GoogleNewsRSSProvider
 from app.providers.newsdata import NewsDataIOProvider
 from app.providers.gnews import GNewsIOProvider
 from app.providers.currents import CurrentsAPIProvider
+from app.providers.rss_outlets import TamilTVRSSProvider
 from app.normalization.boilerplate import extract_article_text
 from app.normalization.unicode import normalize_tamil_text
 from app.deduplication.language_filter import is_tamil
@@ -51,13 +52,83 @@ def download_image(url: str) -> Optional[str]:
         logger.error(f"Failed to download image {url}: {e}")
     return url  # Fallback to remote URL if download fails
 
+import re
+
+# Canonical source name mapping for deduplication
+_SOURCE_ALIASES = {
+    "daily thanthi": "Daily Thanthi",
+    "dailythanthi": "Daily Thanthi",
+    "thanthi": "Daily Thanthi",
+    "\u0ba4\u0bbf\u0ba9\u0ba4\u0bcd\u0ba4\u0ba8\u0bcd\u0ba4\u0bbf": "Daily Thanthi",
+    "dinamalar": "Dinamalar",
+    "\u0ba4\u0bbf\u0ba9\u0bae\u0bb2\u0bb0\u0bcd": "Dinamalar",
+    "vikatan": "Vikatan",
+    "\u0bb5\u0bbf\u0b95\u0b9f\u0ba9\u0bcd": "Vikatan",
+    "dinamani": "Dinamani",
+    "\u0ba4\u0bbf\u0ba9\u0bae\u0ba3\u0bbf": "Dinamani",
+    "sun news": "Sun News",
+    "sun tv": "Sun News",
+    "kalaignar tv": "Kalaignar TV",
+    "kalaignar": "Kalaignar TV",
+    "jaya tv": "Jaya TV",
+    "jaya news": "Jaya TV",
+    "thanthi tv": "Thanthi TV",
+    "polimer news": "Polimer News",
+    "polimer": "Polimer News",
+    "puthiya thalaimurai": "Puthiya Thalaimurai",
+    "puthiyathalaimurai": "Puthiya Thalaimurai",
+    "news18 tamil": "News18 Tamil",
+    "news 18 tamil": "News18 Tamil",
+    "oneindia tamil": "OneIndia Tamil",
+    "the hindu": "The Hindu",
+    "hindu": "The Hindu",
+    "hindu tamil": "Hindu Tamil",
+    "ndtv": "NDTV",
+    "zee tamil": "Zee Tamil",
+    "india today": "India Today",
+    "dinakaran": "Dinakaran",
+    "bbc tamil": "BBC Tamil",
+    "asianet news tamil": "Asianet News Tamil",
+    "asianet": "Asianet News Tamil",
+    "abp nadu": "ABP Nadu",
+}
+
+def _normalize_source_name(name: str) -> str:
+    """Normalize source name to canonical form."""
+    if not name:
+        return name
+    lookup = name.strip().lower()
+    lookup_clean = re.sub(r'\s*(news|tv|online|digital|web)\s*$', '', lookup).strip()
+    return _SOURCE_ALIASES.get(lookup, _SOURCE_ALIASES.get(lookup_clean, name.strip().title()))
+
 def get_or_create_source(db: Session, source_name: str) -> Source:
-    source = db.query(Source).filter(Source.name == source_name).first()
+    canonical_name = _normalize_source_name(source_name)
+    source = db.query(Source).filter(Source.name == canonical_name).first()
     if not source:
-        source = Source(name=source_name, orientation="OTHER_UNKNOWN")
-        db.add(source)
-        db.commit()
-        db.refresh(source)
+        # Also check with the raw name in case it was stored before normalization
+        source = db.query(Source).filter(Source.name == source_name).first()
+        if source:
+            # Update the name to canonical form
+            source.name = canonical_name
+            db.commit()
+            db.refresh(source)
+        else:
+            # Assign logical default orientation based on known Tamil news outlets
+            orientation = "OTHER_UNKNOWN"
+            cn_lower = canonical_name.lower()
+            if any(w in cn_lower for w in ["sun", "kalaignar", "murasoli", "dinakaran"]):
+                orientation = "DRAVIDIAN_ORIENTED"
+            elif any(w in cn_lower for w in ["jaya", "namadhu amma"]):
+                orientation = "AIADMK_ORIENTED"
+            elif any(w in cn_lower for w in ["dinamalar", "janam", "thamarai"]):
+                orientation = "CONSERVATIVE_VARIABLE"
+            elif any(w in cn_lower for w in ["thanthi", "polimer", "puthiya", "hindu", "news18", "zee", "asianet", "abp", "dinamani", "vikatan", "samayam", "oneindia", "bbc"]):
+                orientation = "OTHER_UNKNOWN"
+                
+            source = Source(name=canonical_name, orientation=orientation)
+            db.add(source)
+            db.commit()
+            db.refresh(source)
     return source
 
 def fetch_html(url: str) -> Optional[str]:
@@ -197,3 +268,11 @@ def fetch_currents_api(self):
     provider = CurrentsAPIProvider()
     articles_data = provider.fetch(query="தமிழ்நாடு", limit=10)
     return process_articles("Currents API", articles_data)
+
+@shared_task(bind=True)
+def fetch_tamil_tv_rss(self):
+    """Fetch RSS feeds from Tamil TV news outlets (Sun News, Thanthi TV, etc.)."""
+    logger.info("Starting Tamil TV RSS outlet fetch...")
+    provider = TamilTVRSSProvider()
+    articles_data = provider.fetch(limit_per_outlet=15)
+    return process_articles("Tamil TV RSS", articles_data)

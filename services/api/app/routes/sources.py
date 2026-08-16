@@ -2,13 +2,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.dependencies.database import get_db
+from .events import normalize_source_name
 import uuid
 
 router = APIRouter(prefix="/sources", tags=["sources"])
 
 @router.get("/")
 async def get_all_sources(db: AsyncSession = Depends(get_db)):
-    """Returns a list of all configured sources and their assigned orientation."""
+    """Returns a list of all configured sources with normalized names (duplicates grouped)."""
     query = text("""
         SELECT id, name, domain, language, orientation, orientation_confidence, orientation_evidence, last_reviewed
         FROM sources
@@ -17,11 +18,17 @@ async def get_all_sources(db: AsyncSession = Depends(get_db)):
     result = await db.execute(query)
     rows = result.fetchall()
     
+    # Group by normalized name to avoid duplicates like "daily thandhi" / "Daily Thandhi"
+    seen_names = {}
     sources = []
     for row in rows:
+        canonical = normalize_source_name(row.name)
+        if canonical in seen_names:
+            continue
+        seen_names[canonical] = True
         sources.append({
             "id": str(row.id),
-            "name": row.name,
+            "name": canonical,
             "domain": row.domain,
             "language": row.language,
             "orientation": row.orientation,
@@ -30,6 +37,31 @@ async def get_all_sources(db: AsyncSession = Depends(get_db)):
             "last_reviewed": row.last_reviewed
         })
     return {"sources": sources}
+
+@router.get("/{source_id}")
+async def get_source(source_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    """Returns basic details for a specific source."""
+    source_id_str = str(source_id)
+    query = text("""
+        SELECT id, name, domain, language, orientation, orientation_confidence, orientation_evidence
+        FROM sources
+        WHERE id = :id
+    """)
+    result = await db.execute(query, {"id": source_id_str})
+    row = result.fetchone()
+    
+    if not row:
+        raise HTTPException(status_code=404, detail="Source not found")
+        
+    return {
+        "id": str(row.id),
+        "name": row.name,
+        "domain": row.domain,
+        "language": row.language,
+        "orientation": row.orientation,
+        "confidence": row.orientation_confidence,
+        "evidence": row.orientation_evidence
+    }
 
 @router.get("/{source_id}/profile")
 async def get_source_profile(source_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
