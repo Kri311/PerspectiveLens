@@ -1,12 +1,9 @@
 import { fetchBlindspots } from '@/lib/api';
 import Link from 'next/link';
 import { Inter } from 'next/font/google';
+import Header from '@/components/Header';
 
-const inter = Inter({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
-  variable: '--font-inter',
-});
+const inter = Inter({ subsets: ['latin'], weight: ['400', '500', '600', '700', '800'] });
 
 const t = {
   en: {
@@ -19,9 +16,9 @@ const t = {
     missing: "Missing",
     severity: "Severity",
     viewEvent: "View Event →",
-    left: "Left",
-    center: "Center",
-    right: "Right",
+    dravidian: "Dravidian",
+    aiadmk: "AIADMK",
+    conservative: "Conservative",
     independent: "Independent",
     detected: "Detected blindspots",
     coverageGap: "Coverage gap",
@@ -36,16 +33,17 @@ const t = {
     missing: "குறைவாக செய்தியாக்கப்பட்டது",
     severity: "தீவிரம்",
     viewEvent: "நிகழ்வைக் காண்க",
-    left: "இடதுசாரி",
-    center: "நடுநிலை",
-    right: "வலதுசாரி",
+    dravidian: "திராவிட",
+    aiadmk: "அதிமுக",
+    conservative: "பழமைவாத",
     independent: "சுயாதீன",
     detected: "கண்டறியப்பட்டவை",
     coverageGap: "செய்தி இடைவெளி",
   }
 };
 
-export default async function BlindspotPage({ searchParams }) {
+export default async function BlindspotPage(props) {
+  const searchParams = await props.searchParams;
   const lang = searchParams?.lang === 'ta' ? 'ta' : 'en';
   const strings = t[lang];
 
@@ -61,12 +59,15 @@ export default async function BlindspotPage({ searchParams }) {
 
   return (
     <div
-      className={inter.variable}
+      className={inter.className}
       style={{
         minHeight: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
         backgroundColor: '#f7f5ef',
-        color: '#111111',
-        fontFamily: 'var(--font-inter), sans-serif',
+        color: '#171717',
+        fontFamily: 'Inter, sans-serif',
+        fontWeight: 600,
       }}
     >
 
@@ -126,126 +127,7 @@ export default async function BlindspotPage({ searchParams }) {
         }
       `}</style>
 
-      {/*TOP NAVIGATION*/}
-      <nav
-        className="perspective-nav"
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          padding: '12px 32px',
-          borderBottom: '1px solid #171717',
-          backgroundColor: '#f7f5ef',
-          gap: '24px',
-        }}
-      >
-        <Link
-          href={`/?lang=${lang}`}
-          style={{
-            color: '#111',
-            textDecoration: 'none',
-          }}
-        >
-          <div
-            style={{
-              fontWeight: 800,
-              fontSize: '1.25rem',
-              letterSpacing: '-0.04em',
-              lineHeight: 1,
-              whiteSpace: 'nowrap',
-            }}
-          >
-            PERSPECTIVE LENS
-          </div>
-        </Link>
-
-        {/* Navigation */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '24px',
-            fontSize: '0.9rem',
-            fontWeight: 600,
-            height: '64px',
-          }}
-        >
-          <Link
-            href={`/?lang=${lang}`}
-            style={{
-              color: '#555',
-              textDecoration: 'none',
-              display: 'flex',
-              alignItems: 'center',
-              height: '100%',
-            }}
-          >
-            {strings.home}
-          </Link>
-
-          <Link
-            href={`/blindspots?lang=${lang}`}
-            style={{
-              color: '#111',
-              textDecoration: 'none',
-              display: 'flex',
-              alignItems: 'center',
-              height: '100%',
-              borderBottom: '2px solid #111',
-            }}
-          >
-            {strings.blindspot}
-          </Link>
-
-          <Link
-            href={`/sources?lang=${lang}`}
-            style={{
-              color: '#555',
-              textDecoration: 'none',
-              display: 'flex',
-              alignItems: 'center',
-              height: '100%',
-            }}
-          >
-            {strings.sources}
-          </Link>
-        </div>
-
-        {/* Spacer */}
-        <div style={{ flex: 1 }} />
-
-        {/* Language */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px',
-            fontSize: '0.8rem',
-            fontWeight: 600,
-          }}
-        >
-          <Link
-            href="?lang=en"
-            style={{
-              color: lang === 'en' ? '#111' : '#999',
-              textDecoration: 'none',
-            }}
-          >
-            EN
-          </Link>
-
-          <span style={{ color: '#aaa' }}>|</span>
-
-          <Link
-            href="?lang=ta"
-            style={{
-              color: lang === 'ta' ? '#111' : '#999',
-              textDecoration: 'none',
-            }}
-          >
-            தமிழ்
-          </Link>
-        </div>
-      </nav>
+      <Header lang={lang} activePage="blindspots" />
 
 
       {/*PAGE HEADER*/}
@@ -349,13 +231,13 @@ export default async function BlindspotPage({ searchParams }) {
                * This does NOT invent political percentages.
                */
               const isLeft =
-                sourceGroup.toLowerCase().includes('left');
+                sourceGroup.toLowerCase().includes('dravidian');
 
               const isRight =
-                sourceGroup.toLowerCase().includes('right');
+                sourceGroup.toLowerCase().includes('conservative');
 
               const isCenter =
-                sourceGroup.toLowerCase().includes('center');
+                sourceGroup.toLowerCase().includes('aiadmk');
 
               return (
                 <article
@@ -501,19 +383,19 @@ export default async function BlindspotPage({ searchParams }) {
                       >
                         <div
                           style={{
-                            backgroundColor: isLeft ? '#b42318' : '#d7d4ce',
+                            backgroundColor: isLeft ? '#c9362b' : '#d7d4ce',
                           }}
                         />
 
                         <div
                           style={{
-                            backgroundColor: isCenter ? '#77736d' : '#d7d4ce',
+                            backgroundColor: isCenter ? '#f4f1e9' : '#d7d4ce',
                           }}
                         />
 
                         <div
                           style={{
-                            backgroundColor: isRight ? '#175cd3' : '#d7d4ce',
+                            backgroundColor: isRight ? '#3567b7' : '#d7d4ce',
                           }}
                         />
                       </div>
@@ -528,9 +410,9 @@ export default async function BlindspotPage({ searchParams }) {
                           fontWeight: 500,
                         }}
                       >
-                        <span>{strings.left}</span>
-                        <span>{strings.center}</span>
-                        <span>{strings.right}</span>
+                        <span>{strings.dravidian}</span>
+                        <span>{strings.aiadmk}</span>
+                        <span>{strings.conservative}</span>
                       </div>
 
                     </div>

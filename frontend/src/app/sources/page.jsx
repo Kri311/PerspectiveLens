@@ -1,5 +1,9 @@
 import { fetchSources } from '@/lib/api';
 import Link from 'next/link';
+import { Inter } from 'next/font/google';
+import Header from '@/components/Header';
+
+const inter = Inter({ subsets: ['latin'], weight: ['400', '500', '600', '700', '800'] });
 
 const t = {
   en: {
@@ -24,7 +28,8 @@ const t = {
   }
 };
 
-export default async function SourcesPage({ searchParams }) {
+export default async function SourcesPage(props) {
+  const searchParams = await props.searchParams;
   const lang = searchParams?.lang === 'ta' ? 'ta' : 'en';
   const strings = t[lang];
   let data = { sources: [] };
@@ -38,25 +43,8 @@ export default async function SourcesPage({ searchParams }) {
   const sources = data.sources || [];
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: '#f9fafb', fontFamily: 'var(--font-inter), sans-serif' }}>
-      {/* Top Navigation */}
-      <nav style={{ display: 'flex', alignItems: 'center', padding: '12px 32px', borderBottom: '1px solid #e5e7eb', gap: '24px', backgroundColor: '#fff' }}>
-        <div style={{ fontWeight: 800, fontSize: '1.4rem', letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ backgroundColor: '#111', color: '#fff', padding: '2px 8px', borderRadius: '4px' }}>PERSPECTIVE</span>
-          <span>Lens</span>
-        </div>
-        <div style={{ display: 'flex', gap: '24px', fontSize: '0.9rem', fontWeight: 600 }}>
-          <Link href={`/?lang=${lang}`} style={{ color: '#6b7280', paddingBottom: '4px', textDecoration: 'none' }}>{strings.home}</Link>
-          <Link href={`/blindspots?lang=${lang}`} style={{ color: '#6b7280', paddingBottom: '4px', textDecoration: 'none' }}>{strings.blindspot}</Link>
-          <Link href={`/sources?lang=${lang}`} style={{ color: '#111', borderBottom: '2px solid #111', paddingBottom: '4px', textDecoration: 'none' }}>{strings.sources}</Link>
-          
-          <div style={{ display: 'flex', gap: '8px', marginLeft: '16px', borderLeft: '1px solid #e5e7eb', paddingLeft: '16px' }}>
-            <Link href="?lang=en" style={{ color: lang === 'en' ? '#111' : '#9ca3af', fontWeight: lang === 'en' ? 'bold' : 'normal', textDecoration: 'none' }}>EN</Link>
-            <span style={{ color: '#d1d5db' }}>|</span>
-            <Link href="?lang=ta" style={{ color: lang === 'ta' ? '#111' : '#9ca3af', fontWeight: lang === 'ta' ? 'bold' : 'normal', textDecoration: 'none' }}>தமிழ்</Link>
-          </div>
-        </div>
-      </nav>
+    <div className={inter.className} style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: '#f7f5ef', color: '#171717', fontFamily: 'Inter, sans-serif', fontWeight: 600 }}>
+      <Header lang={lang} activePage="sources" />
 
       <main style={{ maxWidth: '1200px', margin: '0 auto', padding: '32px', width: '100%' }}>
         <header style={{ marginBottom: '40px' }}>

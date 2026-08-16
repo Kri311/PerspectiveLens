@@ -3,12 +3,9 @@ import PerspectiveMatrix from '@/components/PerspectiveMatrix';
 import OrientationBar, { getBias } from '@/components/OrientationBar';
 import Link from 'next/link';
 import { Inter } from 'next/font/google';
+import Header from '@/components/Header';
 
-const inter = Inter({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
-  variable: '--font-inter',
-});
+const inter = Inter({ subsets: ['latin'], weight: ['400', '500', '600', '700', '800'] });
 
 const t = {
   en: {
@@ -45,8 +42,9 @@ const t = {
   }
 };
 
-export default async function EventPage({ params, searchParams }) {
-  const { id } = await params;
+export default async function EventPage(props) {
+  const { id } = await props.params;
+  const searchParams = await props.searchParams;
   const lang = searchParams?.lang === 'ta' ? 'ta' : 'en';
   const strings = t[lang];
 
@@ -65,7 +63,7 @@ export default async function EventPage({ params, searchParams }) {
   }
 
   return (
-    <div className={inter.variable} style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: '#f7f5ef', color: '#111', fontFamily: 'var(--font-inter), sans-serif' }}>
+    <div className={inter.className} style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: '#f7f5ef', color: '#171717', fontFamily: 'Inter, sans-serif', fontWeight: 600 }}>
       <style>{`
         @media (max-width: 800px) {
           .event-layout {
@@ -88,34 +86,7 @@ export default async function EventPage({ params, searchParams }) {
         }
       `}</style>
 
-      {/* Top Navigation */}
-      <nav className="event-nav" style={{ display: 'flex', alignItems: 'center', padding: '12px 32px', borderBottom: '1px solid #d6d2c8', gap: '24px', backgroundColor: '#f7f5ef' }}>
-        <Link
-          href={`/?lang=${lang}`}
-          style={{
-            color: '#111',
-            textDecoration: 'none',
-            fontWeight: 800,
-            fontSize: '1.25rem',
-            letterSpacing: '-0.04em',
-            lineHeight: 1,
-            whiteSpace: 'nowrap',
-          }}
-        >
-          PERSPECTIVE LENS
-        </Link>
-        <div style={{ display: 'flex', gap: '24px', fontSize: '0.9rem', fontWeight: 600 }}>
-          <Link href={`/?lang=${lang}`} style={{ color: '#111', paddingBottom: '4px', textDecoration: 'none' }}>{strings.home}</Link>
-          <Link href={`/blindspots?lang=${lang}`} style={{ color: '#6b7280', paddingBottom: '4px', textDecoration: 'none' }}>{strings.blindspot}</Link>
-          <Link href={`/sources?lang=${lang}`} style={{ color: '#6b7280', paddingBottom: '4px', textDecoration: 'none' }}>{strings.sources}</Link>
-
-          <div style={{ display: 'flex', gap: '8px', marginLeft: '16px', borderLeft: '1px solid #e5e7eb', paddingLeft: '16px' }}>
-            <Link href="?lang=en" style={{ color: lang === 'en' ? '#111' : '#9ca3af', fontWeight: lang === 'en' ? 'bold' : 'normal', textDecoration: 'none' }}>EN</Link>
-            <span style={{ color: '#d1d5db' }}>|</span>
-            <Link href="?lang=ta" style={{ color: lang === 'ta' ? '#111' : '#9ca3af', fontWeight: lang === 'ta' ? 'bold' : 'normal', textDecoration: 'none' }}>தமிழ்</Link>
-          </div>
-        </div>
-      </nav>
+      <Header lang={lang} activePage="home" />
 
       <main className="event-main" style={{ maxWidth: '1200px', margin: '0 auto', padding: '32px', width: '100%', boxSizing: 'border-box' }}>
         <header
