@@ -1,7 +1,7 @@
 const API_URL = process.env.API_URL || 'http://api:8000';
 
 export async function fetchEvents(lang = 'en') {
-  const res = await fetch(`${API_URL}/events/?lang=${lang}`, { next: { revalidate: 30 } });
+  const res = await fetch(`${API_URL}/events/?lang=${lang}`, { next: { revalidate: 10 } });
   if (!res.ok) throw new Error('Failed to fetch events');
   return res.json();
 }
@@ -17,7 +17,7 @@ export async function fetchBlindspots(eventId = null, lang = 'en') {
     ? `${API_URL}/events/${eventId}/blindspots?lang=${lang}`
     : `${API_URL}/blindspots/?lang=${lang}`;
     
-  const res = await fetch(url, { next: { revalidate: 60 } });
+  const res = await fetch(url, { next: { revalidate: 10 } });
   if (!res.ok) throw new Error('Failed to fetch blindspots');
   return res.json();
 }

@@ -1,11 +1,11 @@
 import React from 'react';
 
 const BIAS_CONFIG = {
-  DRAVIDIAN_ORIENTED: { id: 'Left', label: 'Left', color: '#dc2626', textColor: '#fff' },
-  AIADMK_ORIENTED: { id: 'Center', label: 'Center', color: '#ffffff', textColor: '#111', border: '#e5e7eb' },
-  CONSERVATIVE: { id: 'Right', label: 'Right', color: '#2563eb', textColor: '#fff' },
-  POPULIST: { id: 'Others', label: 'Others', color: '#166534', textColor: '#fff' },
-  OTHER_UNKNOWN: { id: 'Others', label: 'Others', color: '#166534', textColor: '#fff' }
+  DRAVIDIAN_ORIENTED: { id: 'Dravidian', label: 'Dravidian', color: '#c9362b', textColor: '#fff' },
+  AIADMK_ORIENTED: { id: 'AIADMK', label: 'AIADMK', color: '#f4f1e9', textColor: '#111', border: '#e5e7eb' },
+  CONSERVATIVE: { id: 'Conservative', label: 'Conservative', color: '#3567b7', textColor: '#fff' },
+  POPULIST: { id: 'Independent', label: 'Independent', color: '#171717', textColor: '#fff' },
+  OTHER_UNKNOWN: { id: 'Independent', label: 'Independent', color: '#171717', textColor: '#fff' }
 };
 
 export function getBias(orientation) {
@@ -19,12 +19,12 @@ export default function OrientationBar({ coverage = {} }) {
     return <div style={{ fontSize: '0.85rem', color: '#6b7280' }}>No bias data available</div>;
   }
 
-  // Group by Left / Center / Right / Others
+  // Group by Dravidian / AIADMK / Conservative / Independent
   const grouped = {
-    Left: { count: 0, config: BIAS_CONFIG.DRAVIDIAN_ORIENTED },
-    Center: { count: 0, config: BIAS_CONFIG.AIADMK_ORIENTED },
-    Right: { count: 0, config: BIAS_CONFIG.CONSERVATIVE },
-    Others: { count: 0, config: BIAS_CONFIG.OTHER_UNKNOWN }
+    Dravidian: { count: 0, config: BIAS_CONFIG.DRAVIDIAN_ORIENTED },
+    AIADMK: { count: 0, config: BIAS_CONFIG.AIADMK_ORIENTED },
+    Conservative: { count: 0, config: BIAS_CONFIG.CONSERVATIVE },
+    Independent: { count: 0, config: BIAS_CONFIG.OTHER_UNKNOWN }
   };
 
   Object.entries(coverage).forEach(([key, count]) => {
@@ -32,7 +32,7 @@ export default function OrientationBar({ coverage = {} }) {
     grouped[bias.id].count += count;
   });
 
-  const orderedKeys = ['Left', 'Center', 'Right', 'Others'];
+  const orderedKeys = ['Dravidian', 'AIADMK', 'Conservative', 'Independent'];
   
   return (
     <div style={{ display: 'flex', flexDirection: 'column', width: '100%', border: '1px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
