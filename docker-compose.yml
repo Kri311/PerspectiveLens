@@ -139,6 +139,8 @@ services:
     container_name: perslens-frontend
     working_dir: /app
     tty: true
+    environment:
+      - API_URL=http://api:8000
     volumes:
       - ./frontend:/app
     ports:
