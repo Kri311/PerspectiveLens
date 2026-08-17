@@ -1,258 +1,161 @@
-# PerspectiveLens
+<div align="center">
+  <h1>PerspectiveLens</h1>
+  <p><b>An event-centric Tamil news intelligence architecture for multi-source semantic aggregation, media-framing comparison, and coverage-blindspot detection.</b></p>
+  
+  [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
+  [![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+  [![Next.js](https://img.shields.io/badge/Next.js-000000?style=for-the-badge&logo=nextdotjs&logoColor=white)](https://nextjs.org/)
+  [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-316192?style=for-the-badge&logo=postgresql&logoColor=white)](https://postgresql.org)
+  [![Redis](https://img.shields.io/badge/Redis-DC382D?style=for-the-badge&logo=redis&logoColor=white)](https://redis.io)
+  [![Docker](https://img.shields.io/badge/Docker-2CA5E0?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
+</div>
 
-PerspectiveLens is a text analytics platform that helps readers compare how different news publishers report the same event.
+<br />
 
-Instead of showing a single news article, the platform collects reports from multiple publishers, identifies articles discussing the same event, extracts important information, and presents different reporting perspectives. The goal is to help readers understand how coverage differs across sources without modifying the original articles.
+## Overview
 
-The platform does not rewrite news, change the tone of an article, or decide which publisher is correct. It only analyzes publicly available news articles and presents factual comparisons so readers can form their own opinions.
+**PerspectiveLens** is a text analytics platform developed as a semester project for the Text Analytics subject, guided by Ayshwarya Kurup. Inspired by platforms like "Ground News," PerspectiveLens is designed specifically for the **Tamil Nadu media landscape**. 
 
----
+Our perspectives are shaped by the news we consume. Media outlets can manipulate narratives through false accusations, exaggeration, or suppression of facts. PerspectiveLens brings transparency by computationally detecting differences in media framing, factual agreements/disagreements, and coverage blindspots.
 
-# Why PerspectiveLens?
-
-People often consume news from only one publisher. While the facts may remain the same, different publishers may emphasize different details, use different language, or focus on different aspects of an event.
-
-PerspectiveLens brings these reports together and allows readers to compare them side by side. Instead of relying on a single source, users can understand how multiple publishers describe the same event.
-
----
-
-# Project Objectives
-
-* Collect recent news articles from multiple publishers.
-* Detect articles discussing the same event.
-* Extract important information from every article.
-* Compare reporting across publishers.
-* Generate factual perspectives based on published content.
-* Present the information in a clear and structured format.
+**It does not determine which publisher is right or wrong, nor does it rewrite news.** It groups articles by *events* rather than *publishers*, allowing readers to compare facts side-by-side.
 
 ---
 
-# Features
+## Core Features
 
-## News Collection
-
-The platform continuously collects recent Tamil news articles from multiple publishers and organizes them based on the events they describe. We use a multi-source ingestion pipeline powered by:
-- Google News RSS
-- NewsData.io API
-- GNews.io API
-- Currents API
-
----
-
-## Text Preprocessing
-
-The collected articles are cleaned before analysis.
-
-This step includes:
-
-* Removing unwanted characters.
-* Removing duplicate content.
-* Normalizing the text.
-* Preparing the content for further processing.
+* **Event-Centric Aggregation:** Groups articles by real-world events before performing any political or bias comparison.
+* **Multi-Source Ingestion:** Automatically ingests from Tamil news sources using APIs like Google News, NewsData.io, and Currents.
+* **Advanced NLP Pipeline:** Uses state-of-the-art Tamil models (fastText, IndicNER, MuRIL, IndicBERT) for sentence embeddings, entity extraction, stance, and sentiment classification.
+* **Media Framing Comparison:** Detects loaded lexical choices, emotional language, and specific framing types across different publishers.
+* **Blindspot Detection:** Identifies which events, entities, or aspects are ignored by specific political or editorial cohorts (e.g., Dravidian-oriented vs. Conservative).
+* **Claim Analysis:** Tracks where reports agree and where they conflict on specific factual claims.
+* **Comparison Dashboard:** A bilingual UI that presents the timeline, reporting differences, and publisher comparison without altering the original articles.
 
 ---
 
-## Named Entity Recognition
+## System Architecture Flowchart
 
-Important entities are extracted from every article.
+The entire system is decoupled into isolated, scalable Docker microservices:
 
-Examples include:
+```mermaid
+graph TD
+    A[Tamil News Sources: Google News, NewsData, Currents API] -->|Ingestion Worker| B[(PostgreSQL + pgvector Data Store)]
+    B -->|Raw Articles| C[NLP Engine GPU: Tamil Embeddings, IndicNER, MuRIL]
+    C -->|Dense Vectors, Entities, Sentiment| D[Analysis Worker: Event Resolution & Clustering]
+    D --> E[Framing Engine & Claim Analysis]
+    E --> F[Coverage Engine & Source Intelligence]
+    F -->|Analysis Results & Insights| B
+    B -->|FastAPI| G[Next.js Frontend Web App]
+    
+    subgraph Data Layer
+    B
+    end
+    subgraph Background Processing
+    A
+    D
+    E
+    F
+    end
+    subgraph ML & Intelligence
+    C
+    end
+    subgraph User Interface
+    G
+    end
+```
 
-* People
-* Organizations
-* Countries
-* Cities
-* Locations
-* Dates
-* Events
+### Microservices Setup (docker-compose.yml)
 
----
+The platform orchestrates 7 core containers:
 
-## Event Extraction
-
-Each article is analyzed to identify the main event.
-
-The extracted information includes:
-
-* What happened
-* Who was involved
-* Where it happened
-* When it happened
-* Actions performed
-* Outcomes
-
----
-
-## Event Clustering
-
-Articles describing the same real-world event are grouped together.
-
-This helps prevent duplicate stories and creates a single event page containing reports from multiple publishers.
-
----
-
-## Perspective Analysis
-
-Once articles are grouped, the platform compares how each publisher reports the event.
-
-The comparison includes:
-
-* Headlines
-* Important facts covered
-* Information omitted
-* Order of information
-* Level of detail
-* Reporting style
-
-The original articles are never modified.
+1. **postgres**: Source of truth with pgvector for semantic similarity search.
+2. **redis**: Message broker for Celery queues and short-lived query cache.
+3. **ingestion-worker**: FastAPI + Celery worker handling rate limits, API fetching, and deduplication.
+4. **nlp-engine**: Heavy PyTorch/GPU processing unit (Embeddings, Stance, Framing).
+5. **analysis-worker**: Mathematical engine for clustering, claim analysis, and blindspot calculations.
+6. **api**: Public-facing FastAPI backend REST API.
+7. **frontend**: React/Next.js frontend.
 
 ---
 
-## Bias Analysis
+## Technology Stack
 
-The platform identifies measurable reporting characteristics such as:
+### Backend & APIs
+* **Framework:** Python, FastAPI
+* **Task Queues:** Celery
+* **Database:** PostgreSQL (with pgvector & JSONB), Redis
 
-* Emotional language
-* Subjective statements
-* Opinion-based wording
-* Neutral reporting
-* Consistency across publishers
+### NLP & Text Analytics Engine
+* **Language Validation:** fastText lid.176
+* **Sentence Embeddings:** l3cube-pune/tamil-sentence-similarity-sbert
+* **Entity Extraction:** ai4bharat/IndicNER
+* **Stance & Framing:** Fine-tuned google/muril-base-cased & IndicBERTv2
+* **Summarization:** mT5_multilingual_XLSum
 
-The analysis is descriptive and does not determine whether a publisher is right or wrong.
-
----
-
-## Perspective Generation
-
-Using information collected from multiple publishers, the platform generates structured perspectives that summarize how different sources describe the same event.
-
-These perspectives are based only on published information and do not introduce new facts or alter the meaning of the original articles.
+### Frontend Interface
+* **Framework:** React, Next.js
+* **Styling:** Tailwind CSS
 
 ---
 
-## Comparison Dashboard
+## Getting Started
 
-The final interface presents all information in one place.
+### Prerequisites
 
-Users can view:
+* Docker and Docker Compose
+* GPU with CUDA support (Recommended for nlp-engine)
+* Node.js v20+ (for local frontend development)
 
-* Event summary
-* Related news articles
-* Timeline of events
-* Important entities
-* Publisher comparison
-* Reporting differences
-* Generated perspectives
+### Running Locally
 
----
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/your-username/perspective_lens.git
+   cd perspective_lens
+   ```
 
-# System Workflow
+2. **Environment Setup**
+   Copy the example environment file and fill in your API keys (NewsData.io, Currents, etc.):
+   ```bash
+   cp .env.example .env
+   ```
 
-1. Collect news articles from multiple publishers.
-2. Clean and preprocess the article text.
-3. Extract named entities.
-4. Extract the main event from each article.
-5. Group articles discussing the same event.
-6. Compare reporting across publishers.
-7. Analyze reporting characteristics.
-8. Generate factual perspectives.
-9. Display the results through the user interface.
+3. **Start the Platform**
+   Spin up the entire microservices stack using Docker Compose:
+   ```bash
+   docker compose up --build
+   ```
 
----
-
-# Technology Stack
-
-## Backend
-
-* Python
-* FastAPI
-
-## Frontend
-
-* React
-* Tailwind CSS
-
-## Database
-
-* PostgreSQL
-* Redis
-
-## Search Engine
-
-* Elasticsearch
-
-## Text Analytics
-
-* Text preprocessing
-* Named Entity Recognition
-* Event Extraction
-* Text Similarity
-* Sentence Embeddings
-* Clustering
-
-## Machine Learning
-
-* Transformer models
-* Sentence embedding models
-* Similarity models
-* Classification models
+4. **Access the Application**
+   * **Frontend:** http://localhost:3000
+   * **API Docs:** http://localhost:8000/docs
+   * **NLP Engine:** http://localhost:8001/docs
 
 ---
 
-# Expected Output
+## Project Flow & NLP Pipeline
 
-For every news event, PerspectiveLens provides:
-
-* Event title
-* Event summary
-* Related articles
-* Timeline
-* Important people
-* Organizations
-* Locations
-* Publisher comparison
-* Reporting differences
-* Multiple factual perspectives
+1. **Ingest & Normalize:** Fetch articles from diverse sources, validate language, normalize Unicode (NFC), and aggressively deduplicate.
+2. **Embed & Extract:** Generate sentence/lead embeddings using SBERT and extract Named Entities (IndicNER).
+3. **Resolve Events:** Query pgvector using cosine similarity to group new articles into existing real-world events.
+4. **Analyze Framing & Claims:** Use MuRIL to extract emotional sentiment, framing styles, and identify contradicting claims between outlets.
+5. **Detect Blindspots:** Identify specific entities or aspects that are systematically excluded by publisher cohorts.
+6. **Serve Insights:** Make everything queryable via FastAPI and rendered on the Next.js dashboard.
 
 ---
 
-# Applications
+## Limitations & Future Work
 
-PerspectiveLens can be used for:
-
-* News aggregation
-* Journalism
-* Media research
-* Academic research
-* Fact-checking support
-* Public awareness
-* Educational purposes
+* **Limitations:** The system only analyzes publicly available news text and cannot independently verify real-world facts. It does not rewrite original content.
+* **Future Work:**
+  * Real-time streaming ingestion.
+  * Expansion to multi-lingual (English + Tamil cross-comparison).
+  * Historical event tracking and analysis.
+  * Deeper Source Reliability Metadata.
 
 ---
 
-# Limitations
-
-* The platform only analyzes publicly available news articles.
-* The quality of the analysis depends on the available news sources.
-* The platform does not verify whether an event actually occurred.
-* It does not determine which publisher is correct.
-* It does not rewrite or modify original news articles.
-
----
-
-# Future Work
-
-* Real-time news streaming
-* Support for multiple languages
-* Cross-country news comparison
-* Interactive event timelines
-* Historical event analysis
-* Source reliability indicators
-* Personalized news recommendations
-* Mobile application support
-
----
-
-# Project Goal
-
-The goal of PerspectiveLens is to make news consumption more transparent by allowing readers to compare how multiple publishers report the same event. Instead of presenting a single version of a story, the platform provides structured comparisons and factual perspectives so users can understand different styles of reporting and make informed decisions.
+<div align="center">
+  <p>Built for a more transparent media landscape.</p>
+</div>
