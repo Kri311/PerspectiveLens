@@ -1,0 +1,51 @@
+networks:
+  default:
+    name: perspective_lens_perslens-network
+    external: true
+
+services:
+  api_feed_fetcher:
+    image: python:3.11-alpine
+    container_name: demo_api_feed
+    environment:
+      - PYTHONIOENCODING=utf-8
+    volumes:
+      - ./api_feed_fetcher/main.py:/app/main.py
+      - ./output:/app/output
+    command: python /app/main.py
+
+  ner_extractor:
+    image: python:3.11-alpine
+    container_name: demo_ner
+    depends_on:
+      - api_feed_fetcher
+    environment:
+      - PYTHONIOENCODING=utf-8
+    volumes:
+      - ./ner_extractor/main.py:/app/main.py
+      - ./output:/app/output
+    command: python /app/main.py
+
+  summarizer:
+    image: python:3.11-alpine
+    container_name: demo_summarizer
+    depends_on:
+      - ner_extractor
+    environment:
+      - PYTHONIOENCODING=utf-8
+    volumes:
+      - ./summarizer/main.py:/app/main.py
+      - ./output:/app/output
+    command: python /app/main.py
+
+  stance_framing:
+    image: python:3.11-alpine
+    container_name: demo_stance_framing
+    depends_on:
+      - summarizer
+    environment:
+      - PYTHONIOENCODING=utf-8
+    volumes:
+      - ./stance_framing/main.py:/app/main.py
+      - ./output:/app/output
+    command: python /app/main.py

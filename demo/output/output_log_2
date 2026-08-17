@@ -1,0 +1,24 @@
+{
+  "input_text": "போதைப்பொருள்: அமைச்சர் சரத்துக்கு உதயநிதி கேள்வி  BBCMinister Vs Udhayanidhi | \"தவறான தகவல்.. தெரிஞ்சுட்டு பேசுங்க\" | ஸ்பாட்டில் ரிப்ளை கொடுத்த உதயநிதி  Thanthi TVகாவிரியில் தண்ணீர் வரவில்லை எனப் பேசியதால் கைது செய்தனர்: உதயநிதி ஸ்டாலின் பேச்சு  Daily Thanthi'நான் கூட இதுக்கு தான் நினைச்சேன்...'-கைது குறித்து உதயநிதி கிண்டல் பேச்சு!  maalaimalar.com“எந்தத் துறைக்கு யார் அமைச்சர் என்பதே தெரியவில்லை” - உதயநிதி பேட்டி!  Nakkheeran",
+  "model_used": "google/muril-base-cased & IndicBERTv2 (LIVE)",
+  "sentiment_analysis": {
+    "sentiment": "NEGATIVE",
+    "confidence": 0.5906943678855896
+  },
+  "framing_analysis": {
+    "top_frame": "Controversy/Scandal",
+    "distribution": {
+      "Controversy/Scandal": 0.3618830144405365,
+      "Policy/Achievement": 0.22610896825790405,
+      "Political Strategy": 0.1392066478729248,
+      "Law and Order": 0.13102908432483673,
+      "Social Justice": 0.07110141217708588,
+      "Economic": 0.07067093998193741
+    }
+  },
+  "stance_analysis": {
+    "stance": "SUPPORT",
+    "confidence": 0.4743480682373047,
+    "target_entity": "Vs Udhayanidhi"
+  }
+}
